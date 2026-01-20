@@ -24,6 +24,7 @@ from colorama import deinit
 deinit()
 
 from torch.utils.data import Dataset, random_split, DataLoader
+from torch.utils.tensorboard import SummaryWriter  # [新增] TensorBoard 支持
 import cvxpy as cp
 from rich.console import Console
 from rich.progress import Progress
@@ -68,6 +69,12 @@ class DUNETrain:
 
         self.construct_problem()
         self.checkpoint_path = checkpoint_path
+
+        # [新增] 初始化 TensorBoard Writer
+        # 日志将保存在 checkpoint_path 下的 'runs' 文件夹中
+        # 例如: model/scout_mini_diff/runs
+        self.log_dir = os.path.join(self.checkpoint_path, 'runs')
+        self.writer = SummaryWriter(log_dir=self.log_dir)
 
         self.loss_fn = torch.nn.MSELoss()
 
@@ -169,6 +176,10 @@ class DUNETrain:
             "model": self.model,
         }
 
+        # Ensure checkpoint directory exists
+        if not os.path.exists(self.checkpoint_path):
+            os.makedirs(self.checkpoint_path)
+
         with open(self.checkpoint_path + "/train_dict.pkl", "wb") as f:
             pickle.dump(train_dict, f)
 
@@ -210,6 +221,18 @@ class DUNETrain:
                     train_dataloader, False
                 )
 
+                # [新增] 计算总 Loss 并写入 TensorBoard (训练集)
+                total_train_loss = mu_loss + distance_loss + fa_loss + fb_loss
+                
+                self.writer.add_scalar('Loss/Train/Total', total_train_loss, i)
+                self.writer.add_scalar('Loss/Train/Mu', mu_loss, i)
+                self.writer.add_scalar('Loss/Train/Distance', distance_loss, i)
+                self.writer.add_scalar('Loss/Train/Fa', fa_loss, i)
+                self.writer.add_scalar('Loss/Train/Fb', fb_loss, i)
+                
+                current_lr = self.optimizer.param_groups[0]["lr"]
+                self.writer.add_scalar('Hyperparameters/Learning_Rate', current_lr, i)
+
                 ml, dl, al, bl = (
                     "{:.2e}".format(mu_loss),
                     "{:.2e}".format(distance_loss),
@@ -225,6 +248,15 @@ class DUNETrain:
                         validate_fa_loss,
                         validate_fb_loss,
                     ) = self.train_one_epoch(valid_dataloader, True)
+
+                    # [新增] 计算总 Loss 并写入 TensorBoard (验证集)
+                    total_valid_loss = valid_mu_loss + valid_distance_loss + validate_fa_loss + validate_fb_loss
+                    
+                    self.writer.add_scalar('Loss/Valid/Total', total_valid_loss, i)
+                    self.writer.add_scalar('Loss/Valid/Mu', valid_mu_loss, i)
+                    self.writer.add_scalar('Loss/Valid/Distance', valid_distance_loss, i)
+                    self.writer.add_scalar('Loss/Valid/Fa', validate_fa_loss, i)
+                    self.writer.add_scalar('Loss/Valid/Fb', validate_fb_loss, i)
 
                     vml, vdl, val, vbl = (
                         "{:.2e}".format(valid_mu_loss),
@@ -294,7 +326,9 @@ class DUNETrain:
                 if save_loss:
                     with open(self.checkpoint_path + "/loss.pkl", "wb") as f:
                         pickle.dump(self.loss_list, f)
-
+        
+        # [新增] 训练结束关闭 Writer
+        self.writer.close()
         print("finish train, the model is saved in {}".format(ful_model_name))
 
         return ful_model_name
