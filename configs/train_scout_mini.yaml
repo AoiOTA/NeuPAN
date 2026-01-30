@@ -1,8 +1,8 @@
 # Scout Mini DUNE 模型训练配置
 robot:
   kinematics:  'diff'          # 差速驱动模型
-  length: 0.65                # Scout Mini 长度 0.612m + 安全余量
-  width: 0.60                 # Scout Mini 宽度 0.58m + 安全余量
+  length: 0.612                # Scout Mini 长度 0.612m + 安全余量
+  width: 0.58                 # Scout Mini 宽度 0.58m + 安全余量
 
 # 训练参数
 train:
